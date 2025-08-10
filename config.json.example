@@ -1,0 +1,36 @@
+{ 
+    "theme": {
+        "name": "dark",
+        "color": {
+            "background": "#1e1e1e",
+            "foreground": "#d4d4d4",
+            "selection": "#2a2a2a",
+            "cursor": "#d4d4d4",
+            "black": "#1e1e1e",
+            "red": "#ff5555",
+            "green": "#55ff55",
+            "yellow": "#ffff55",
+            "blue": "#5555ff",
+            "magenta": "#ff55ff",
+            "cyan": "#55ffff",
+            "white": "#d4d4d4"
+        }
+    },
+    "mcp": {
+        "mcp-personnal-tool": {
+            "type": "stdio",
+            "command": "node",
+            "args": ["/path/to/your/mcp/server.js"],
+            "env": {
+                "NODE_ENV": "production"
+            }
+        },
+        "hyperbrowser": {
+            "command": "npx",
+            "args": ["-y", "hyperbrowser-mcp"],
+            "env": {
+                "HYPERBROWSER_API_KEY": "YOUR-API-KEY"
+             }
+        }
+    }
+}
