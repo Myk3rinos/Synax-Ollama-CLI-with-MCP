@@ -23,17 +23,18 @@ export class ToolAgent {
         this.mcpByTool = mcpByTool;
     }
 
-    async handleToolExecution(tools: Tool[], prompt: string): Promise<{success?: boolean, cancelled?: boolean} | void> {
+    async handleToolExecution(tools: Tool[], prompt: string, selectedTool: string): Promise<{success?: boolean, cancelled?: boolean, toolName?: string} | void> {
         const toolsDescription = this.formatToolsForMistral(tools); 
         const toolPrompt = `
         ** TOOLS:**
         You have access to the following tools:
         ${toolsDescription}
         
+        ** SELECTED TOOL:**
+        ${selectedTool}
+        
         ** RULES:**
         - User want to use tools to answer his request.
-        - Translate in english the user request to find the best tool.
-        - Try to determine which tool is the best to use.
         - If user send a command in the prompt, do not change it.
         - If the user doesn't provide all required arguments, you must generate them intelligently:
           * For paths: Is user provide a incomplite path based on french linux file system structure, rebuild the full correct path based on the context, 
@@ -95,7 +96,7 @@ export class ToolAgent {
                 // Ask for confirmation if the tool is a shell command 
                 if (toolCalls.tool === 'execute-shell-command' && toolCalls.arguments?.command) {
                     const run = await confirmExecution(toolCalls.arguments.command);
-                    console.log(run);
+                    // console.log(run);
                     if (!run) {
                         console.log(chalk.yellow('\nCancelled by user \n'));
                         // break;
@@ -104,14 +105,14 @@ export class ToolAgent {
                 }
                 
                 await this.callTool(toolCalls.tool, toolCalls.arguments);
-                return { success: true };
+                return { success: true, toolName: toolCalls.tool };
             } else if (aiResponse.length === 0) {
                 console.log(chalk.blue(aiResponse));
                 throw new Error(aiResponse);
             } else {
                 // Cas où l'IA ne demande pas d'outil mais donne une réponse
                 console.log(chalk.blue(aiResponse));
-                return { success: true };
+                return { success: true, toolName: undefined };
             }
 
         } catch (error) {

@@ -12,6 +12,8 @@ import { ToolAgent } from './agents/tool_agent.js';
 import { agentRouteRequest } from './agents/routing_agent.js';
 import { PlanningAgent } from './agents/planning_agent.js';
 import { ControlAgent } from './agents/control_agent.js';
+import { TranslationAgent } from './agents/translation_agent.js';
+import { ToolSelectorAgent } from './agents/tool_selector_agent.js';
 import { addHistory, getHistory, addUserInput, clearHistory } from './history/history.js';
 import asciiArt from './utils/synax-ascii.js';
 import loadingAnimation from './utils/loading-animation.js';
@@ -39,6 +41,8 @@ class SynaxCLI {
     private toolAgent: ToolAgent | null = null;
     private controlAgent: ControlAgent | null = null;
     private planningAgent: PlanningAgent | null = null;
+    private translationAgent: TranslationAgent;
+    private toolSelectorAgent: ToolSelectorAgent;
     // private loadingAnimation: LoadingAnimation | any;
 
     constructor(baseUrl: string = "http://localhost:11434", model: string | null = null) {
@@ -46,10 +50,12 @@ class SynaxCLI {
         this.model = model || modelName;
         this.timeout = 60000;
         
-        // Initialiser l'agent de conversation
+        // Initialiser les agents
         this.conversationAgent = new ConversationAgent(this.baseUrl, this.model, this.timeout);
+        this.translationAgent = new TranslationAgent(this.baseUrl, this.model, this.timeout);
         this.controlAgent = new ControlAgent(this.baseUrl, this.model, this.timeout);
         this.planningAgent = new PlanningAgent(this.baseUrl, this.model, this.timeout);
+        this.toolSelectorAgent = new ToolSelectorAgent(this.baseUrl, this.model, this.timeout);
 
         this.rl = readline.createInterface({
             input: process.stdin,
@@ -146,11 +152,22 @@ class SynaxCLI {
             // Save user input in history
             try { addUserInput(input); } catch {}
 
+            // try {
+            //     input = await this.translationAgent.translateToEnglish(input);
+            // } catch (error) {
+            //     console.error(chalk.yellow('⚠️  Erreur lors de la traduction:'), error);
+            // }
+
+
             // Planning
             // if (this.planningAgent) {
             //     const planResult = await this.planningAgent.planSteps(this.tools, input);
             //     console.log(planResult);
             // }
+
+            
+            const selectedTool = await this.toolSelectorAgent.selectBestTool(this.tools, input);
+
 
             // Determine which agent to use
             const routingDecision = await agentRouteRequest(
@@ -162,7 +179,8 @@ class SynaxCLI {
                 this.tools
             );
 
-            console.log(this.tools);
+
+            // console.log(this.tools);
             // Prefix the prompt with the conversation history (timestamps + labels)
             // const convHistory = getHistory();
             // if (convHistory && convHistory.trim().length > 0) {
@@ -175,12 +193,13 @@ class SynaxCLI {
                 let attempts = 0;
                 const maxAttempts = 5;
                 let currentPrompt = input;
+                let toolName: string | null | undefined = undefined;
 
                 while (attempts < maxAttempts) {
                     loadingAnimation.start();
                     try {
-                        console.log(currentPrompt);
-                        const result = await this.toolAgent.handleToolExecution(this.tools, currentPrompt + '\n');
+                        const result = await this.toolAgent.handleToolExecution(this.tools, currentPrompt, selectedTool!);
+                        toolName = result?.toolName;
                         loadingAnimation.stop();
                         process.stdout.moveCursor(0, -1);
                         if (result?.cancelled) {
@@ -196,7 +215,7 @@ class SynaxCLI {
                         // console.error(chalk.red(`Error message: ${errorMessage}`));
 
                         if (attempts < maxAttempts && this.controlAgent) {
-                            currentPrompt = await this.controlAgent.controlToolAgent(this.tools, currentPrompt, errorMessage, attempts);
+                            currentPrompt = await this.controlAgent.controlToolAgent(toolName!, currentPrompt, errorMessage, attempts);
                             loadingAnimation.stop();
                         } else {
                             console.error(chalk.red('Max attempts reached. Tool execution failed.'));

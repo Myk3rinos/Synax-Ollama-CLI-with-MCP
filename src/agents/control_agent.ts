@@ -44,7 +44,7 @@ export class ControlAgent {
         this.timeout = timeout;
     }
 
-    async controlToolAgent(tools: Tool[], previousPrompt: string, error: string, attempts: number): Promise<string> {
+    async controlToolAgent(toolName: string, previousPrompt: string, error: string, attempts: number): Promise<string> {
         const controlPrompt = `
 You are a control agent. Your role is to analyze the error from the previous tool execution and refine the prompt to ensure the next attempt is successful.
 
@@ -67,8 +67,8 @@ ${previousPrompt}
 **Error:**
 ${error}
 
-**Tools:**
-${tools}
+**Tool:**
+${toolName}
 
 **Instructions:**
 1.  Analyze the error and the previous prompt.
