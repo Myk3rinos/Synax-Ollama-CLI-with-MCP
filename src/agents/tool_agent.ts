@@ -5,6 +5,7 @@ import confirmExecution from "../utils/confirm-execution.js";
 // import confirmExecution from "../utils/execution-confirmer2.js";
 // import { confirmExecution } from "../utils/execution_confirmer.js";
 import { addHistory } from '../history/history.js';
+// import { confirmExecution } from '../utils/confirm-exe.js';
 
 export class ToolAgent {
     private baseUrl: string;
@@ -25,39 +26,71 @@ export class ToolAgent {
 
     async handleToolExecution(tools: Tool[], prompt: string, selectedTool: string): Promise<{success?: boolean, cancelled?: boolean, toolName?: string} | void> {
         const toolsDescription = this.formatToolsForMistral(tools); 
+        // const toolPrompt = `
+        // ** TOOLS:**
+        // You have access to the following tools:
+        // ${toolsDescription}
+        
+        // ** SELECTED TOOL:**
+        // ${selectedTool}
+        
+        // ** RULES:**
+        // - User want to use tools to answer his request.
+        // - If user send a command in the prompt, do not change it.
+        // - If the user doesn't provide all required arguments, you must generate them intelligently:
+        //   * For paths: Is user provide a incomplite path based on french linux file system structure, rebuild the full correct path based on the context, 
+        //   * For text fields: Generate a relevant placeholder value
+        //   * For booleans: Use a sensible default (true/false)
+        //   * For numbers: Use a reasonable default value
+        // - If the user provides only a partial path, try to complete it with the most likely directory structure
+        // - Always include all required parameters, even if you need to generate them
+        // - Response ONLY One JSON object, without any additional text.
+        
+        // You MUST respond with only one JSON object in the following format without any additional text:
+        // ** RESPONSE FORMAT:**
+        // {
+        //     "tool": "the_name_of_the_tool_to_use",
+        //     "arguments": {
+        //         "param1": "value1",
+        //         "param2": "value2"
+        //     }
+        // }
+        
+        // ${prompt}
+        
+        // `;
         const toolPrompt = `
-        ** TOOLS:**
-        You have access to the following tools:
-        ${toolsDescription}
-        
-        ** SELECTED TOOL:**
-        ${selectedTool}
-        
-        ** RULES:**
-        - User want to use tools to answer his request.
-        - If user send a command in the prompt, do not change it.
-        - If the user doesn't provide all required arguments, you must generate them intelligently:
-          * For paths: Is user provide a incomplite path based on french linux file system structure, rebuild the full correct path based on the context, 
-          * For text fields: Generate a relevant placeholder value
-          * For booleans: Use a sensible default (true/false)
-          * For numbers: Use a reasonable default value
-        - If the user provides only a partial path, try to complete it with the most likely directory structure
-        - Always include all required parameters, even if you need to generate them
-        - Response ONLY One JSON object, without any additional text.
-        
-        You MUST respond with only one JSON object in the following format without any additional text:
-        ** RESPONSE FORMAT:**
-        {
-            "tool": "the_name_of_the_tool_to_use",
-            "arguments": {
-                "param1": "value1",
-                "param2": "value2"
-            }
-        }
-        
-        ${prompt}
-        
-        `;
+** CRITICAL INSTRUCTION: RESPOND WITH EXACTLY ONE JSON OBJECT ONLY **
+
+** TOOLS:**
+You have access to the following tools:
+${toolsDescription}
+
+** SELECTED TOOL:**
+${selectedTool}
+
+** MANDATORY RULES:**
+1. You MUST respond with EXACTLY ONE JSON object
+2. NO explanations, NO comments, NO additional text before or after
+3. NO multiple JSON objects
+4. NO markdown code blocks
+5. User wants to use tools to answer his request
+6. If user sends a command in the prompt, do not change it
+7. If the user doesn't provide all required arguments, you must generate them intelligently:
+   * For paths: If user provides incomplete path based on french linux file system structure, rebuild the full correct path based on context
+   * For text fields: Generate a relevant placeholder value  
+   * For booleans: Use a sensible default (true/false)
+   * For numbers: Use a reasonable default value
+8. If the user provides only a partial path, complete it with the most likely directory structure
+9. Always include ALL required parameters, even if you need to generate them
+
+** RESPONSE FORMAT (EXACTLY THIS STRUCTURE):**
+{"tool":"tool_name","arguments":{"param1":"value1","param2":"value2"}}
+
+** FINAL REMINDER: OUTPUT ONLY THE JSON OBJECT - NO OTHER TEXT WHATSOEVER **
+
+User request: ${prompt}
+`;
 
         try {
             const response = await fetch(`${this.baseUrl}/api/generate`, {
