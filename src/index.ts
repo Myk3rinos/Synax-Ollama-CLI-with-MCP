@@ -5,16 +5,20 @@ import chalk from 'chalk';
 import { execSync } from 'child_process';
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { Tool, } from "@anthropic-ai/sdk/resources/messages/messages.mjs";
+import { Tool } from "@anthropic-ai/sdk/resources/messages/messages.mjs";
 import { getMcpConfig, McpConfig } from './mcp/mcp-config.js';
 import { ConversationAgent } from './agents/conversation_agent.js';
 import { ToolAgent } from './agents/tool_agent.js';
 import { agentRouteRequest } from './agents/routing_agent.js';
 import { PlanningAgent } from './agents/planning_agent.js';
 import { ControlAgent } from './agents/control_agent.js';
+import { TranslationAgent } from './agents/translation_agent.js';
+import { ToolSelectorAgent } from './agents/tool_selector_agent.js';
 import { addHistory, getHistory, addUserInput, clearHistory } from './history/history.js';
-import asciiArt from './utils/synax-ascii.js';
+import asciiArt from './utils/00-cli-ascii.js';
+// import asciiArt from './utils/synax-ascii.js';
 import loadingAnimation from './utils/loading-animation.js';
+import { ollamaService } from './utils/ollamaService.js';
 
 const DEFAULT_MODEL: string = 'mistral';
 let modelName: string = DEFAULT_MODEL;
@@ -39,6 +43,8 @@ class SynaxCLI {
     private toolAgent: ToolAgent | null = null;
     private controlAgent: ControlAgent | null = null;
     private planningAgent: PlanningAgent | null = null;
+    private translationAgent: TranslationAgent;
+    private toolSelectorAgent: ToolSelectorAgent;
     // private loadingAnimation: LoadingAnimation | any;
 
     constructor(baseUrl: string = "http://localhost:11434", model: string | null = null) {
@@ -46,10 +52,12 @@ class SynaxCLI {
         this.model = model || modelName;
         this.timeout = 60000;
         
-        // Initialiser l'agent de conversation
+        // Initialiser les agents
         this.conversationAgent = new ConversationAgent(this.baseUrl, this.model, this.timeout);
+        this.translationAgent = new TranslationAgent(this.baseUrl, this.model, this.timeout);
         this.controlAgent = new ControlAgent(this.baseUrl, this.model, this.timeout);
         this.planningAgent = new PlanningAgent(this.baseUrl, this.model, this.timeout);
+        this.toolSelectorAgent = new ToolSelectorAgent(this.baseUrl, this.model, this.timeout);
 
         this.rl = readline.createInterface({
             input: process.stdin,
@@ -87,11 +95,11 @@ class SynaxCLI {
         // console.log(chalk.gray('\n'));
         console.log(chalk.rgb(0, 162, 255)(asciiArt));
         console.log(chalk.gray(` Connected to: ${this.baseUrl}`));
-        console.log(chalk.gray(` Model: ${this.model}${this.model === DEFAULT_MODEL ? ' (default)' : ''}`));
-        console.log(chalk.gray(' Type "exit" or "quit" to quit, "clear" to clear history'));
-        console.log(chalk.gray(' Type "help" to see available commands\n'));
+        console.log(chalk.gray(` Model: ${chalk.magenta(this.model)}${this.model === DEFAULT_MODEL ? ' (default)' : ''}`));
+        console.log(chalk.gray(` Type ${chalk.blue("exit")} or ${chalk.blue("quit")} to quit, ${chalk.blue("clear")} to clear history`));
+        console.log(chalk.gray(` Type ${chalk.blue("help")} to see available commands\n`));
         const cfg = getMcpConfig();
-        const serverNames = cfg ? Object.keys(cfg) : [];
+        const serverNames = cfg ? Object.keys(cfg).map(name => ` . ${name}`) : [];
         console.log(chalk.gray(` MCP servers: \n${chalk.cyan(serverNames.length ? serverNames.join('\n') : 'none')}`) + '\n');
     }
 
@@ -146,11 +154,21 @@ class SynaxCLI {
             // Save user input in history
             try { addUserInput(input); } catch {}
 
-            // Planning
-            // if (this.planningAgent) {
-            //     const planResult = await this.planningAgent.planSteps(this.tools, input);
-            //     console.log(planResult);
+            // try {
+            //     input = await this.translationAgent.translateToEnglish(input);
+            // } catch (error) {
+            //     console.error(chalk.yellow('⚠️  Erreur lors de la traduction:'), error);
             // }
+
+
+            // Planning
+            if (this.planningAgent) {
+                const planResult = await this.planningAgent.planSteps(this.tools, input);
+                // console.log(planResult);
+            }
+
+            
+
 
             // Determine which agent to use
             const routingDecision = await agentRouteRequest(
@@ -162,25 +180,29 @@ class SynaxCLI {
                 this.tools
             );
 
-            console.log(this.tools);
+
+            // console.log(this.tools);
             // Prefix the prompt with the conversation history (timestamps + labels)
-            // const convHistory = getHistory();
-            // if (convHistory && convHistory.trim().length > 0) {
-            //     input += '\n\nCONVERSATION HISTORY:\n' + convHistory + "\n\n";
-            // }
+            const convHistory = getHistory();
+            if (convHistory && convHistory.trim().length > 0) {
+                input += '\n\nCONVERSATION HISTORY:\n' + convHistory + "\n\n";
+            }
             // console.log(input);
 
             loadingAnimation.stop();
             if (routingDecision === 'TOOL' && this.toolAgent) {
+                const selectedTool = await this.toolSelectorAgent.selectBestTool(this.tools, input);
+                console.log(selectedTool);
                 let attempts = 0;
                 const maxAttempts = 5;
                 let currentPrompt = input;
+                let toolName: string | null | undefined = undefined;
 
                 while (attempts < maxAttempts) {
                     loadingAnimation.start();
                     try {
-                        console.log(currentPrompt);
-                        const result = await this.toolAgent.handleToolExecution(this.tools, currentPrompt + '\n');
+                        const result = await this.toolAgent.handleToolExecution(this.tools, currentPrompt, selectedTool!);
+                        toolName = result?.toolName;
                         loadingAnimation.stop();
                         process.stdout.moveCursor(0, -1);
                         if (result?.cancelled) {
@@ -196,7 +218,7 @@ class SynaxCLI {
                         // console.error(chalk.red(`Error message: ${errorMessage}`));
 
                         if (attempts < maxAttempts && this.controlAgent) {
-                            currentPrompt = await this.controlAgent.controlToolAgent(this.tools, currentPrompt, errorMessage, attempts);
+                            currentPrompt = await this.controlAgent.controlToolAgent(toolName!, currentPrompt, errorMessage, attempts);
                             loadingAnimation.stop();
                         } else {
                             console.error(chalk.red('Max attempts reached. Tool execution failed.'));
@@ -208,6 +230,12 @@ class SynaxCLI {
             } else if (routingDecision === 'CONVERSATION' && this.conversationAgent) {
                 await this.conversationAgent.handleConversation(input);
             }
+
+
+
+
+
+
             loadingAnimation.stop();
             setTimeout(() => {
                 this.updateBottomLine();
@@ -222,9 +250,7 @@ class SynaxCLI {
     }
 
     start(): void {
-        // console.log(chalk.green(` ${this.model} CLI started!\n`));
         console.log(chalk.rgb(134, 90, 255)(` ${this.model} CLI started!\n`));
-        // console.log(chalk.gray(' Type "help" to see available commands\n'));
         this.rl.prompt();
         this.updateBottomLine();
 
@@ -278,7 +304,7 @@ class SynaxCLI {
         input = input.trim();
 
         if (input === 'exit' || input === 'quit') {
-
+            await ollamaService.cleanup();
             // if (this.toolAgent) {
             //     const convHistory = getHistory();
             //     await this.toolAgent.handleToolExecution(this.tools, `use save-history tool, message: ${convHistory}, title:find good title for this conversation, and feel all entries` );
@@ -389,6 +415,17 @@ async function main() {
     const args = process.argv.slice(2);
     let baseUrl = "http://localhost:11434";
     let model: string | null = null;
+    
+    // Start Ollama service
+    try {
+        console.log(chalk.blue('Starting Ollama service...'));
+        await ollamaService.start('mistral');
+        model = ollamaService.getModelName();
+        console.log(chalk.green(`Ollama service started with model: ${model}`));
+    } catch (error) {
+        console.error(chalk.red('Failed to start Ollama service:'), error);
+        process.exit(1);
+    }
 
     // Parser les arguments
     for (let i = 0; i < args.length; i++) {
@@ -400,6 +437,30 @@ async function main() {
     }
 
     const cli = new SynaxCLI(baseUrl, model);
+    
+    // Handle process termination
+    const cleanupAndExit = async () => {
+        console.log(chalk.blue('\nShutting down...'));
+        await ollamaService.cleanup();
+        process.exit(0);
+    };
+
+    process.on('SIGINT', cleanupAndExit);
+    process.on('SIGTERM', cleanupAndExit);
+    
+    // try {
+    //     // Start the CLI if it has a run method
+    //     if (typeof cli.run === 'function') {
+    //         await cli.run();
+    //     } else {
+    //         console.log('Application started. Press Ctrl+C to exit.');
+    //         // Keep the process alive
+    //         await new Promise(() => {});
+    //     }
+    // } catch (error) {
+    //     console.error(chalk.red('An error occurred:'), error);
+    //     await cleanupAndExit();
+    // }
 
     const mcpConfig = getMcpConfig();
     if (mcpConfig) {

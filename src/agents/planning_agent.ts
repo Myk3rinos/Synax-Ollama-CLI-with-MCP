@@ -34,7 +34,7 @@ export class PlanningAgent {
      */
     async planSteps(tools: Tool[], userRequest: string): Promise<PlanResult> {
         const plannerPrompt = this.buildPlannerPrompt(tools, userRequest);
-        console.log(plannerPrompt);
+        // console.log(plannerPrompt);
 
         try {
             const response = await fetch(`${this.baseUrl}/api/generate`, {
@@ -113,7 +113,7 @@ Rules:
 Response format (JSON ONLY):
 {
     "steps": [
-        { "number": 1, "step": "Titre bref de l'étape", "prompt": "Prompt exact pour l'agent d'outils" },
+        { "number": 1, "step": "Title of the step", "prompt": "Exact prompt for the tool agent" },
         { "number": 2, "step": "...", "prompt": "..." }
     ]
 }
