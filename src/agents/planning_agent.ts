@@ -32,9 +32,113 @@ export class PlanningAgent {
      * Chaque étape contient un numéro, un intitulé, et le prompt exact destiné à l'agent d'outils.
      * Ne produit AUCUN texte hors JSON au retour. Cette fonction s'assure de parser le JSON.
      */
-    async planSteps(tools: Tool[], userRequest: string): Promise<PlanResult> {
-        const plannerPrompt = this.buildPlannerPrompt(tools, userRequest);
+    async planSteps(formatingTools: string, userRequest: string): Promise<PlanResult> {
+        // const plannerPrompt = this.buildPlannerPrompt(formatingTools, userRequest);
         // console.log(plannerPrompt);
+        const plannerPrompt = `
+You are a strategic planning agent. Your role is to decompose the user's request into a sequence of DISTINCT, EXECUTABLE steps that a tool-execution agent can follow to accomplish the task successfully.
+
+** YOUR MISSION:**
+Analyze the user's request and create a logical workflow that considers:
+- What information needs to be gathered first
+- What preconditions must be met
+- What sequential dependencies exist between actions
+- How to handle potential errors or missing data
+
+${formatingTools}
+
+** CRITICAL PLANNING PRINCIPLES:**
+1. **Sequential Logic**: Each step must logically follow from the previous one
+2. **Information Gathering First**: Always gather necessary information before taking action
+3. **Verification Steps**: Include steps to verify conditions before proceeding
+4. **Complete Context**: Each step should have all context needed for execution
+5. **Error Prevention**: Anticipate what could go wrong and plan accordingly
+
+** DETAILED STEP REQUIREMENTS:**
+- Each step must be completely self-contained and executable independently
+- Include ALL necessary context, file paths, parameters in the prompt
+- Make prompts specific enough that the tool agent doesn't need to guess
+- Consider the computer's state and what information it needs at each step
+- Think about the logical sequence: locate → read → analyze → modify → write
+
+** EXAMPLE WORKFLOW LOGIC:**
+For file editing: Find file location → Read current content → Understand required changes → Create modified version → Write back to file
+For system tasks: Check current state → Identify what needs to change → Execute changes → Verify results
+
+** MANDATORY RULES:**
+- Minimize the number of steps 
+- Build steps in relation with available tools
+- Each prompt must be detailed and complete
+- Keep user's original language (French requests stay in French)
+- Use execute-shell-command if specialized tools aren't available
+- No explanations outside JSON format
+- Focus on practical execution, not theory
+
+** RESPONSE FORMAT (JSON ONLY):**
+{
+    "steps": [
+        { "number": 1, "step": "Descriptive title of what this step accomplishes", "prompt": "Complete, detailed prompt with all context, parameters, and specific instructions the tool agent needs to execute this step successfully" },
+        { "number": 2, "step": "Next logical step title", "prompt": "Detailed prompt explaining exactly what to do, with what parameters, and expected outcomes" }
+    ]
+}
+
+** USER REQUEST:**
+${userRequest}
+`;
+//         const plannerPrompt = `
+// You are a strategic planning agent. Your role is to decompose the user's request into a sequence of DISTINCT, EXECUTABLE steps that a tool-execution agent can follow to accomplish the task successfully.
+
+// ** YOUR MISSION:**
+// Analyze the user's request and create a logical workflow that considers:
+// - What information needs to be gathered first
+// - What preconditions must be met
+// - What sequential dependencies exist between actions
+// - How to handle potential errors or missing data
+
+// ** AVAILABLE TOOLS:**
+// ${formatingTools}
+
+// ** CRITICAL PLANNING PRINCIPLES:**
+// 1. **Sequential Logic**: Each step must logically follow from the previous one
+// 2. **Information Gathering First**: Always gather necessary information before taking action
+// 3. **Verification Steps**: Include steps to verify conditions before proceeding
+// 4. **Complete Context**: Each step should have all context needed for execution
+// 5. **Error Prevention**: Anticipate what could go wrong and plan accordingly
+
+// ** DETAILED STEP REQUIREMENTS:**
+// - Each step must be completely self-contained and executable independently
+// - Include ALL necessary context, file paths, parameters in the prompt
+// - Make prompts specific enough that the tool agent doesn't need to guess
+// - Consider the computer's state and what information it needs at each step
+// - Think about the logical sequence: locate → read → analyze → modify → write
+
+// ** EXAMPLE WORKFLOW LOGIC:**
+// For file editing: Find file location → Read current content → Understand required changes → Create modified version → Write back to file
+// For system tasks: Check current state → Identify what needs to change → Execute changes → Verify results
+
+// ** MANDATORY RULES:**
+// - Maximum 10 steps
+// - Each prompt must be detailed and complete
+// - Keep user's original language (French requests stay in French)
+// - Use execute-shell-command if specialized tools aren't available
+// - No explanations outside JSON format
+// - Focus on practical execution, not theory
+
+// ** IMPORTANT RULES: **
+// - MUST RETURN ONLY RESPONSE FORMAT JSON
+// - MUST NOT RETURN ANY TEXT OUTSIDE RESPONSE FORMAT JSON
+
+// ** RESPONSE FORMAT (JSON ONLY):**
+// {
+//     "steps": [
+//         { "number": 1, "step": "Descriptive title of what this step accomplishes", "prompt": "Complete, detailed prompt with all context, parameters, and specific instructions the tool agent needs to execute this step successfully" },
+//         { "number": 2, "step": "Next logical step title", "prompt": "Detailed prompt explaining exactly what to do, with what parameters, and expected outcomes" }
+//     ]
+// }
+
+// ** USER REQUEST:**
+// ${userRequest}
+// `;
 
         try {
             const response = await fetch(`${this.baseUrl}/api/generate`, {
@@ -66,6 +170,8 @@ export class PlanningAgent {
             const aiResponse: string = result.response ?? '';
 
             const parsed = this.extractJson(aiResponse);
+            // console.log(parsed);
+            // const parsed = this.parseToolCall(aiResponse);
             if (!parsed) {
                 throw new Error('Planner did not return a valid JSON payload.');
             }
@@ -80,12 +186,12 @@ export class PlanningAgent {
                 const number = typeof s.number === 'number' ? s.number : idx + 1;
                 const step = String(s.step ?? s.title ?? `Step ${number}`);
                 const prompt = String(s.prompt ?? '');
-                if (!prompt) {
-                    throw new Error(`Invalid step ${number}: missing prompt.`);
-                }
+                // if (!prompt) {
+                //     throw new Error(`Invalid step ${number}: missing prompt.`);
+                // }
                 return { number, step, prompt };
             });
-
+            // console.log(steps);
             return { steps };
         } catch (error) {
             console.log('\n' + chalk.red('Planning Error:'), error instanceof Error ? error.message : 'Unknown error');
@@ -93,35 +199,96 @@ export class PlanningAgent {
         }
     }
 
-    private buildPlannerPrompt(tools: Tool[], userRequest: string): string {
-        const toolsDescription = this.formatToolsForPlanner(tools);
-        return `
-You are a planning agent. Your role is to decompose the user's request into a small number of DISTINCT, EXECUTABLE steps for a tool-execution agent.
-Focus on the user's request and the available tools to generate a plan.
-Do not add more steps than necessary.
-If tools are not available, try to execute the user's request using the tool execute-shell-command.
-Available tools:\n${toolsDescription}
+//     private buildPlannerPrompt(formatingTools: string, userRequest: string): string {
+//         // const toolsDescription = this.formatToolsForPlanner(formatingTools);
+//         return `
+// You are a strategic planning agent. Your role is to decompose the user's request into a sequence of DISTINCT, EXECUTABLE steps that a tool-execution agent can follow to accomplish the task successfully.
 
-Rules:
-- Steps must be self-contained and unambiguous.
-- Each step must carry an exact prompt that the Tool Agent can use directly.
-- Prefer 2-6 steps; keep it concise but complete.
-- Keep the user's original intent and constraints.
-- Do NOT include any explanations or prose outside JSON.
-- Always keep the user's language. If the user speaks French, keep steps and prompts in French.
+// ** YOUR MISSION:**
+// Analyze the user's request and create a logical workflow that considers:
+// - What information needs to be gathered first
+// - What preconditions must be met
+// - What sequential dependencies exist between actions
+// - How to handle potential errors or missing data
 
-Response format (JSON ONLY):
-{
-    "steps": [
-        { "number": 1, "step": "Title of the step", "prompt": "Exact prompt for the tool agent" },
-        { "number": 2, "step": "...", "prompt": "..." }
-    ]
-}
+// ** AVAILABLE TOOLS:**
+// ${formatingTools}
 
-User request:
-${userRequest}
-`;
-    }
+// ** CRITICAL PLANNING PRINCIPLES:**
+// 1. **Sequential Logic**: Each step must logically follow from the previous one
+// 2. **Information Gathering First**: Always gather necessary information before taking action
+// 3. **Verification Steps**: Include steps to verify conditions before proceeding
+// 4. **Complete Context**: Each step should have all context needed for execution
+// 5. **Error Prevention**: Anticipate what could go wrong and plan accordingly
+
+// ** DETAILED STEP REQUIREMENTS:**
+// - Each step must be completely self-contained and executable independently
+// - Include ALL necessary context, file paths, parameters in the prompt
+// - Make prompts specific enough that the tool agent doesn't need to guess
+// - Consider the computer's state and what information it needs at each step
+// - Think about the logical sequence: locate → read → analyze → modify → write
+
+// ** EXAMPLE WORKFLOW LOGIC:**
+// For file editing: Find file location → Read current content → Understand required changes → Create modified version → Write back to file
+// For system tasks: Check current state → Identify what needs to change → Execute changes → Verify results
+
+// ** MANDATORY RULES:**
+// - Maximum 10 steps
+// - Each prompt must be detailed and complete
+// - Keep user's original language (French requests stay in French)
+// - Use execute-shell-command if specialized tools aren't available
+// - No explanations outside JSON format
+// - Focus on practical execution, not theory
+
+
+
+// ** RESPONSE FORMAT (JSON ONLY):**
+// {
+//     "steps": [
+//         { "number": 1, "step": "Descriptive title of what this step accomplishes", "prompt": "Complete, detailed prompt with all context, parameters, and specific instructions the tool agent needs to execute this step successfully" },
+//         { "number": 2, "step": "Next logical step title", "prompt": "Detailed prompt explaining exactly what to do, with what parameters, and expected outcomes" }
+//     ]
+// }
+// ** IMPORTANT RULES: **
+// - MUST RETURN ONLY RESPONSE FORMAT JSON
+// - MUST NOT RETURN ANY TEXT OUTSIDE RESPONSE FORMAT JSON
+// ** USER REQUEST:**
+// ${userRequest}
+// `;
+// //         return `
+// // You are a planning agent. Your role is to decompose the user's request into a small number of DISTINCT, EXECUTABLE steps for a tool-execution agent.
+// // You have to find the best process to execute the user's request.
+// // Focus on the user's request and the available tools to generate a plan.
+// // Do not add more steps than necessary.
+// // If tools are not available, try to execute the user's request using the tool execute-shell-command.
+// // Available tools:\n${toolsDescription}
+
+// // Rules:
+// // - Steps must be self-contained and unambiguous.
+// // - Each step follow computing logic.
+// // - Each step must carry an exact prompt that the Tool Agent can use directly.
+// // - Try to minimize the number of steps.
+// // - Do NOT create more steps than necessary.
+// // - Each step must be distinct and executable.
+// // - Keep the user's original intent and constraints.
+// // - Do NOT include any explanations or prose outside JSON.
+// // - Do NOT exceed the maximum number of 10 steps.
+// // - Do NOT include any prose or explanations outside the JSON format.
+// // - Always keep the user's language. If the user speaks French, keep steps and prompts in French.
+// // - Your Prompt must be complete, clear and precise.
+
+// // YOU MUST strictly response with this format (JSON ONLY):
+// // {
+// //     "steps": [
+// //         { "number": 1, "step": "Title of the step", "prompt": "Exact prompt for the tool agent with all details" },
+// //         { "number": 2, "step": "...", "prompt": "..." }
+// //     ]
+// // }
+
+// // User request:
+// // ${userRequest}
+// // `;
+//     }
 
     private extractJson(text: string): any | null {
         try {
@@ -137,20 +304,50 @@ ${userRequest}
             return null;
         }
     }
-
-    private formatToolsForPlanner(tools: any[]): string {
-        if (!tools || tools.length === 0) return "(none)";
-        let desc = "";
-        tools.forEach(tool => {
-            desc += `- ${tool.name}: ${tool.description}\n`;
-            if (tool.input_schema && tool.input_schema.properties) {
-                desc += `  Parameters required:\n`;
-                Object.entries(tool.input_schema.properties).forEach(([key, value]: [string, any]) => {
-                    const val: any = value as any;
-                    desc += `    - ${key}: ${val.description || val.type}\n`;
-                });
-            }
-        });
-        return desc.trimEnd();
-    }
+    // private async parseToolCall(response: string) {
+    //     try {
+    //         const jsonMatch = response.match(/\{[\s\S]*\}/);
+    //         if (!jsonMatch) return null;
+            
+    //         const parsed = JSON.parse(jsonMatch[0]);
+            
+    //         // Vérifier si c'est un format de planning (avec un tableau steps)
+    //         if (parsed.steps && Array.isArray(parsed.steps)) {
+    //             // Retourner tout l'objet planning
+    //             return {
+    //                 planning: parsed
+    //             };
+    //         }
+            
+    //         // // Pour la rétrocompatibilité avec l'ancien format
+    //         // if (parsed.tool && parsed.arguments) {
+    //         //     return {
+    //         //         tool: parsed.tool,
+    //         //         arguments: parsed.arguments
+    //         //     };
+    //         // }
+            
+    //         // Si on arrive ici, on retourne tout l'objet parsé
+    //         return parsed;
+            
+    //     } catch (error) {
+    //         console.error('Error parsing tool call:', error);
+    //         return null;
+    //     }
+    // }
+    // private formatToolsForPlanner(tools: any[]): string {
+    //     if (!tools || tools.length === 0) return "(none)";
+    //     let desc = "";
+    //     tools.forEach(tool => {
+    //         desc += `- ${tool.name}: ${tool.description}\n`;
+    //         if (tool.input_schema && tool.input_schema.properties) {
+    //             desc += `  Parameters required:\n`;
+    //             Object.entries(tool.input_schema.properties).forEach(([key, value]: [string, any]) => {
+    //                 const val: any = value as any;
+    //                 desc += `    - ${key}: ${val.description || val.type}\n`;
+    //             });
+    //         }
+    //     });
+    //     return desc.trimEnd();
+    // }
 }

@@ -14,23 +14,15 @@ function timestamp(): string {
     return `${Y}-${M}-${D} ${h}:${m}:${s}`;
 }
 // REAFAIRE AVEC UNE FONCTION
-export function addHistory(entry: string): void {
+export function addHistory(entry: string, role: string = 'USER'): void {
     if (entry == null) return;
     const lines = String(entry).split(/\r?\n/);
     for (const line of lines) {
         if (line.trim().length === 0) continue;
-        historyBuffer.push(`[${timestamp()}] RESPONSE: ${line}`);
+        historyBuffer.push(`[${timestamp()}] ${role}: ${line}`);
     }
 }
 
-export function addUserInput(input: string): void {
-    if (input == null) return;
-    const lines = String(input).split(/\r?\n/);
-    for (const line of lines) {
-        if (line.trim().length === 0) continue;
-        historyBuffer.push(`[${timestamp()}] USER: ${line}`);
-    }
-}
 
 export function getHistory(): string {
     return historyBuffer.join('\n');

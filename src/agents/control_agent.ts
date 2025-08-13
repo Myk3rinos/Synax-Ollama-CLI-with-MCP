@@ -1,37 +1,5 @@
 import chalk from 'chalk';
 
-import os from 'os';
-import { execSync } from 'child_process';
-import { Tool } from "@anthropic-ai/sdk/resources/messages/messages.mjs";
-
-function getFileSystemTree(homeDir: string): string {
-    try {
-        // Utiliser ls avec options pour afficher la structure des dossiers
-        const output = execSync(`ls -la ${homeDir}`, { 
-            encoding: 'utf-8',
-            maxBuffer: 10 * 1024 * 1024
-        });
-        return output || "No directory structure found.";
-    } catch (error) {
-        if (error instanceof Error) {
-            return `Error getting directory structure: ${error.message}`;
-        }
-        return "An unknown error occurred while getting the file system tree.";
-    }
-}
-
-const USER_NAME = os.userInfo().username || "User";
-const OS_PLATFORM = os.platform();
-const OS_ARCH = os.arch();
-const OS_RELEASE = os.release();
-const OS_HOMEDIR = os.homedir();
-const OS_TMPDIR = os.tmpdir();
-const CPU_CORES = os.cpus().length;
-const TOTAL_MEMORY_GB = (os.totalmem() / (1024 * 1024 * 1024)).toFixed(2);
-const FREE_MEMORY_GB = (os.freemem() / (1024 * 1024 * 1024)).toFixed(2);
-const UPTIME_HOURS = (os.uptime() / 3600).toFixed(1);
-const NETWORK_INTERFACES = os.networkInterfaces();
-const OS_LANGUAGE = process.env.LANG || 'en_US.UTF-8';
 
 export class ControlAgent {
     private baseUrl: string;
@@ -44,22 +12,15 @@ export class ControlAgent {
         this.timeout = timeout;
     }
 
-    async controlToolAgent(toolName: string, previousPrompt: string, error: string, attempts: number): Promise<string> {
+    async controlToolAgent(toolsDescription: string, toolName: string, previousPrompt: string, error: string, attempts: number): Promise<string> {
         const controlPrompt = `
 You are a control agent. Your role is to analyze the error from the previous tool execution and refine the prompt to ensure the next attempt is successful.
 
-**System Information:**
-- User: ${USER_NAME}
-- OS: ${OS_PLATFORM} ${OS_ARCH} (${OS_RELEASE})
-- CPU Cores: ${CPU_CORES}
-- Memory: ${FREE_MEMORY_GB}GB free of ${TOTAL_MEMORY_GB}GB total
-- Uptime: ${UPTIME_HOURS} hours
-- Home Directory: ${OS_HOMEDIR}
-- Temp Directory: ${OS_TMPDIR}
-- System Language: ${OS_LANGUAGE}
+**Tools:**
+${toolsDescription}
 
-**File System Structure:**
-${getFileSystemTree(OS_HOMEDIR)}
+**Tool:**
+${toolName}
 
 **Previous Prompt:**
 ${previousPrompt}
@@ -67,11 +28,11 @@ ${previousPrompt}
 **Error:**
 ${error}
 
-**Tool:**
-${toolName}
+
 
 **Instructions:**
-1.  Analyze the error and the previous prompt.
+MUST insiste that only ONE json response is expected.
+1.  Analyze the error, the CONVERSATION HISTORY and the previous prompt.
 2.  Identify the reason for the failure (e.g., missing parameters, incorrect format, incorrect path, etc.).
 3.  Generate a new, corrected prompt that addresses the error.
 4.  Ensure the new prompt is clear, complete, and follows all the rules of the original prompt.
@@ -103,6 +64,7 @@ ${toolName}
 // await this.toolAgent.handleToolExecution(this.tools, currentPrompt);
             const result = await response.json();
             console.log(chalk.yellow(` 🧠 Control agent generated a new prompt... | try: ${attempts}`));
+            // try { addHistory(`${result.response}`, 'RESPONSE CONTROL TOOL'); } catch {}
             // process.stdout.moveCursor(0, -1);
             return result.response;
 
@@ -113,4 +75,20 @@ ${toolName}
             return previousPrompt;
         }
     }
+    // const commands = {
+    //     os: 'uname -a',
+    //     cpu: 'lscpu',
+    //     memory: 'free -h',
+    //     disk: 'df -h',
+    //     uptime: 'uptime',
+    //     ...(detailLevel === 'full' ? {
+    //         network: 'ip addr',
+    //         processes: 'ps aux | wc -l',
+    //         users: 'who',
+    //         load: 'cat /proc/loadavg',
+    //         memoryDetails: 'cat /proc/meminfo',
+    //         // cpuInfo: 'cat /proc/cpuinfo'
+    //     } : {})
+    // };
+
 }

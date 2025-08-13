@@ -2,9 +2,10 @@ import chalk from 'chalk';
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { Tool } from "@anthropic-ai/sdk/resources/messages/messages.mjs";
 import confirmExecution from "../utils/confirm-execution.js";
+import { addHistory } from '../history/history.js';
 // import confirmExecution from "../utils/execution-confirmer2.js";
 // import { confirmExecution } from "../utils/execution_confirmer.js";
-import { addHistory } from '../history/history.js';
+// import { addHistory } from '../history/history.js';
 // import { confirmExecution } from '../utils/confirm-exe.js';
 
 export class ToolAgent {
@@ -24,8 +25,8 @@ export class ToolAgent {
         this.mcpByTool = mcpByTool;
     }
 
-    async handleToolExecution(tools: Tool[], prompt: string, selectedTool: string): Promise<{success?: boolean, cancelled?: boolean, toolName?: string} | void> {
-        const toolsDescription = this.formatToolsForMistral(tools); 
+    async handleToolExecution(toolsDescription: string, prompt: string): Promise<{success?: boolean, cancelled?: boolean, toolName?: string} | void> {
+        // const toolsDescription = this.formatToolsForMistral(tools); 
         // const toolPrompt = `
         // ** TOOLS:**
         // You have access to the following tools:
@@ -66,9 +67,6 @@ export class ToolAgent {
 You have access to the following tools:
 ${toolsDescription}
 
-** SELECTED TOOL:**
-${selectedTool}
-
 ** MANDATORY RULES:**
 1. You MUST respond with EXACTLY ONE JSON object
 2. NO explanations, NO comments, NO additional text before or after
@@ -88,6 +86,7 @@ ${selectedTool}
 {"tool":"tool_name","arguments":{"param1":"value1","param2":"value2"}}
 
 ** FINAL REMINDER: OUTPUT ONLY THE JSON OBJECT - NO OTHER TEXT WHATSOEVER **
+** ALWAYS RESPONSE WITH ONLY ONE JSON OBJECT **
 
 User request: ${prompt}
 `;
@@ -154,29 +153,29 @@ User request: ${prompt}
         }
     }
 
-    private formatToolsForMistral(tools: any[]) {
-        if (!tools || tools.length === 0) return "";
+    // private formatToolsForMistral(tools: any[]) {
+    //     if (!tools || tools.length === 0) return "";
         
-        let toolsDescription = "\n\nTools available :\n";
-        tools.forEach(tool => {
-            toolsDescription += `- ${tool.name}: ${tool.description}\n`;
-            if (tool.input_schema && tool.input_schema.properties) {
-                toolsDescription += `  Parameters required:\n`;
-                Object.entries(tool.input_schema.properties).forEach(([key, value]: [string, any]) => {
-                    toolsDescription += `    - ${key}: ${value.description || value.type}\n`;
-                });
-            }
-        });
+    //     let toolsDescription = "\n\nTools available :\n";
+    //     tools.forEach(tool => {
+    //         toolsDescription += `- ${tool.name}: ${tool.description}\n`;
+    //         if (tool.input_schema && tool.input_schema.properties) {
+    //             toolsDescription += `  Parameters required:\n`;
+    //             Object.entries(tool.input_schema.properties).forEach(([key, value]: [string, any]) => {
+    //                 toolsDescription += `    - ${key}: ${value.description || value.type}\n`;
+    //             });
+    //         }
+    //     });
         
-        toolsDescription += `\nFor tool execution, respond EXACTLY with the following JSON format using the correct parameter names :
-        {
-            "tool": "tool_name",
-            "arguments": {
-                "param_exact": "value"
-            }
-        }`;
-        return toolsDescription;
-    }
+    //     toolsDescription += `\nFor tool execution, respond EXACTLY with the following JSON format using the correct parameter names :
+    //     {
+    //         "tool": "tool_name",
+    //         "arguments": {
+    //             "param_exact": "value"
+    //         }
+    //     }`;
+    //     return toolsDescription;
+    // }
 
     private async parseToolCall(response: string) {
         try {
@@ -203,6 +202,7 @@ User request: ${prompt}
                 name: toolName,
                 arguments: args
             });
+            try { addHistory(`Tool execution: ${toolName}, arguments: ${JSON.stringify(args)}`, 'RESPONSE PULL IN TOOL EXECUTION'); } catch {}
             if (result.content) {
                 for (const content of result.content as any[]) {
                     if (content.error) {
@@ -211,13 +211,14 @@ User request: ${prompt}
                         console.log(`\n Tool: ` + chalk.blue(toolName));
                         if (content?.shell) console.log(`💻 Shell: ` + chalk.blue(content?.shell));
                         console.log(chalk.green(`${content.text}\n`));
-                        try { addHistory(`Tool output: ${content.text}`); } catch {}
+                        try { addHistory(`Tool name: \n${toolName}\n`, 'RESPONSE OUTPUT EXECUTION TOOL'); } catch {}
+                        try { addHistory(`Tool output: \n${content.text}\n`, 'RESPONSE OUTPUT EXECUTION TOOL'); } catch {}
                         return {break: true};
                     }
                 }
             }
         } catch (error) {
-            try { addHistory(`❌ Error executing tool ${toolName}:` + (error instanceof Error ? error.message : 'Unknown error')) } catch {}
+            // try { addHistory(`❌ Error executing tool ${toolName}:` + (error instanceof Error ? error.message : 'Unknown error')) } catch {}
             throw error;
         }
     }

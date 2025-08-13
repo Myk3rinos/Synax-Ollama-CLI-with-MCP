@@ -21,9 +21,10 @@ Available tools: ${tools.map(t => `${t.name}: ${t.description}`).join(', ')}
 
 User input: "${userInput}"
 
+Before Analyzing the user input, look in CONVERSATION HISTORY if response exists, if so, return CONVERSATION.
 Analyze the user input and respond with EXACTLY one word at the beginning of your response:
 - "CONVERSATION" if the user wants to chat, ask questions, or have a discussion
-- "TOOL" if the user wants to execute a specific action, use a tool, or perform a task that matches one of the available tools
+- "TOOL" if the user wants to execute a specific action, create something, use a tool, or perform a task that matches one of the available tools
 
 Your response format should be: CONVERSATION or TOOL followed by a brief explanation.`;
 

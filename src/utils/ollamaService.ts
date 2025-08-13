@@ -41,18 +41,18 @@ export class OllamaService {
                 console.log('Ollama is not running, starting it now...');
             }
 
-            console.log(`Starting Ollama service with model: ${this.modelName}`);
+            // console.log(`Starting Ollama service with model: ${this.modelName}`);
             
-            // Start Ollama service
-            // Création du dossier de logs s'il n'existe pas
-            const logsDir = path.join(process.cwd(), 'logs');
-            if (!fs.existsSync(logsDir)) {
-                fs.mkdirSync(logsDir, { recursive: true });
-            }
+            // // Start Ollama service
+            // // Création du dossier de logs s'il n'existe pas
+            // const logsDir = path.join(process.cwd(), 'logs');
+            // if (!fs.existsSync(logsDir)) {
+            //     fs.mkdirSync(logsDir, { recursive: true });
+            // }
             
-            // Création des streams pour les logs avec horodatage
-            const logFile = path.join(logsDir, `ollama-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
-            const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+            // // Création des streams pour les logs avec horodatage
+            // const logFile = path.join(logsDir, `ollama-${new Date().toISOString().replace(/[:.]/g, '-')}.log`);
+            // const logStream = fs.createWriteStream(logFile, { flags: 'a' });
             
             // console.log(`Ollama logs will be written to: ${logFile}`);
             
@@ -62,13 +62,13 @@ export class OllamaService {
                 detached: true
             });
             
-            // Redirection des sorties vers le fichier de log
-            if (this.ollamaProcess.stdout) {
-                this.ollamaProcess.stdout.pipe(logStream);
-            }
-            if (this.ollamaProcess.stderr) {
-                this.ollamaProcess.stderr.pipe(logStream);
-            }
+            // // Redirection des sorties vers le fichier de log
+            // if (this.ollamaProcess.stdout) {
+            //     this.ollamaProcess.stdout.pipe(logStream);
+            // }
+            // if (this.ollamaProcess.stderr) {
+            //     this.ollamaProcess.stderr.pipe(logStream);
+            // }
             
             // Détachement du processus parent
             this.ollamaProcess.unref();
@@ -96,65 +96,65 @@ export class OllamaService {
         }
     }
 
-    private checkAndPullModel(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            console.log(`Checking if model ${this.modelName} is available...`);
+    // private checkAndPullModel(): Promise<void> {
+    //     return new Promise((resolve, reject) => {
+    //         console.log(`Checking if model ${this.modelName} is available...`);
             
-            const checkProcess = spawn('ollama', ['list'], {
-                stdio: ['pipe', 'pipe', 'pipe']
-            });
+    //         const checkProcess = spawn('ollama', ['list'], {
+    //             stdio: ['pipe', 'pipe', 'pipe']
+    //         });
 
-            let output = '';
-            checkProcess.stdout.on('data', (data) => {
-                output += data.toString();
-            });
+    //         let output = '';
+    //         checkProcess.stdout.on('data', (data) => {
+    //             output += data.toString();
+    //         });
 
-            checkProcess.on('close', (code) => {
-                if (code === 0) {
-                    const modelExists = output.includes(this.modelName);
-                    if (modelExists) {
-                        console.log(`Model ${this.modelName} is already available`);
-                        resolve();
-                    } else {
-                        console.log(`Pulling model ${this.modelName}...`);
-                        this.pullModel()
-                            .then(resolve)
-                            .catch(reject);
-                    }
-                } else {
-                    console.warn('Could not check for existing models, skipping model verification');
-                    resolve();
-                }
-            });
+    //         checkProcess.on('close', (code) => {
+    //             if (code === 0) {
+    //                 const modelExists = output.includes(this.modelName);
+    //                 if (modelExists) {
+    //                     console.log(`Model ${this.modelName} is already available`);
+    //                     resolve();
+    //                 } else {
+    //                     console.log(`Pulling model ${this.modelName}...`);
+    //                     this.pullModel()
+    //                         .then(resolve)
+    //                         .catch(reject);
+    //                 }
+    //             } else {
+    //                 console.warn('Could not check for existing models, skipping model verification');
+    //                 resolve();
+    //             }
+    //         });
 
-            checkProcess.on('error', (error) => {
-                console.warn('Error checking for existing models:', error.message);
-                resolve(); // Continue even if we can't check
-            });
-        });
-    }
+    //         checkProcess.on('error', (error) => {
+    //             console.warn('Error checking for existing models:', error.message);
+    //             resolve(); // Continue even if we can't check
+    //         });
+    //     });
+    // }
 
-    private pullModel(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            const pullProcess = spawn('ollama', ['pull', this.modelName], {
-                stdio: 'inherit',
-                shell: true
-            });
+    // private pullModel(): Promise<void> {
+    //     return new Promise((resolve, reject) => {
+    //         const pullProcess = spawn('ollama', ['pull', this.modelName], {
+    //             stdio: 'inherit',
+    //             shell: true
+    //         });
 
-            pullProcess.on('close', (code) => {
-                if (code === 0) {
-                    console.log(`Successfully pulled model ${this.modelName}`);
-                    resolve();
-                } else {
-                    reject(new Error(`Failed to pull model ${this.modelName}`));
-                }
-            });
+    //         pullProcess.on('close', (code) => {
+    //             if (code === 0) {
+    //                 console.log(`Successfully pulled model ${this.modelName}`);
+    //                 resolve();
+    //             } else {
+    //                 reject(new Error(`Failed to pull model ${this.modelName}`));
+    //             }
+    //         });
 
-            pullProcess.on('error', (error) => {
-                reject(new Error(`Failed to start pull process: ${error.message}`));
-            });
-        });
-    }
+    //         pullProcess.on('error', (error) => {
+    //             reject(new Error(`Failed to start pull process: ${error.message}`));
+    //         });
+    //     });
+    // }
 
     public getModelName(): string {
         return this.modelName;
@@ -171,19 +171,65 @@ export class OllamaService {
         
         try {
             // Try to gracefully stop Ollama
+                        // // Try to gracefully stop Ollama
+                        // try {
+                        //     // execSync('pkill -f "ollama serve"');
+                        //     // execSync('pkill -f "ollama"');
+                        //     execSync('pkill -f ollama');
+                        //     console.log('Ollama service stopped gracefully');
+                        // } catch (error) {
+                        //     console.warn('Could not stop Ollama gracefully, trying force stop...');
+                        //     try {
+                        //         // execSync('pkill -9 -f "ollama serve"');
+                        //         execSync('pkill -9 -f ollama');
+                        //         console.log('Ollama service force stopped');
+                        //     } catch (forceError) {
+                        //         console.error('Failed to force stop Ollama service:');
+                        //         // console.error('Failed to force stop Ollama service:', forceError);
+                        //     }
+                        // }
             try {
-                execSync('pkill -f "ollama serve"');
+                // Essayer d'abord avec pkill simple
+                // execSync('pkill -f "ollama serve" || true');
                 execSync('pkill -f ollama');
-                console.log('Ollama service stopped gracefully');
-            } catch (error) {
-                console.warn('Could not stop Ollama gracefully, trying force stop...');
-                try {
-                    execSync('pkill -9 -f "ollama serve"');
-                    console.log('Ollama service force stopped');
-                } catch (forceError) {
-                    console.error('Failed to force stop Ollama service:');
-                    // console.error('Failed to force stop Ollama service:', forceError);
+                
+                // Vérifier si le processus est toujours en cours d'exécution
+                const checkProcess = () => {
+                    try {
+                        const result = execSync('pgrep -f "ollama serve" || echo ""').toString().trim();
+                        return result ? result.split('\n')[0] : null;
+                    } catch {
+                        return null;
+                    }
+                };
+
+                const pid = checkProcess();
+                if (pid) {
+                    console.log(`Found Ollama process with PID ${pid}, attempting to kill...`);
+                    try {
+                        execSync(`kill ${pid}`);
+                        // Donner un peu de temps au processus pour s'arrêter
+                        setTimeout(() => {
+                            if (checkProcess()) {
+                                console.log('Process still running, sending SIGKILL...');
+                                execSync(`kill -9 ${pid}`);
+                            }
+                        }, 1000);
+                    } catch (killError) {
+                        console.warn('Could not kill process with kill, trying pkill -9...');
+                        execSync('pkill -9 -f "ollama serve" || true');
+                    }
                 }
+                
+                // Vérification finale
+                if (!checkProcess()) {
+                    console.log('Ollama service stopped successfully');
+                } else {
+                    console.warn('Warning: Could not confirm Ollama service has stopped');
+                }
+            } catch (error) {
+                console.error('Error stopping Ollama service:');
+                // console.error(error);
             }
             
             this.isRunning = false;

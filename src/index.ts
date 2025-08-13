@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import 'dotenv/config';
 import readline from 'readline';
 import chalk from 'chalk';
 import { execSync } from 'child_process';
@@ -14,13 +15,16 @@ import { PlanningAgent } from './agents/planning_agent.js';
 import { ControlAgent } from './agents/control_agent.js';
 import { TranslationAgent } from './agents/translation_agent.js';
 import { ToolSelectorAgent } from './agents/tool_selector_agent.js';
-import { addHistory, getHistory, addUserInput, clearHistory } from './history/history.js';
+import { addHistory, getHistory, clearHistory } from './history/history.js';
 import asciiArt from './utils/00-cli-ascii.js';
 // import asciiArt from './utils/synax-ascii.js';
 import loadingAnimation from './utils/loading-animation.js';
 import { ollamaService } from './utils/ollamaService.js';
+import { formatToolsForMistral, formatToolsForPrompt } from './utils/formatTools.js';
+import { getSystemInfo } from './utils/infoSystem.js';
 
-const DEFAULT_MODEL: string = 'mistral';
+// const DEFAULT_MODEL: string = 'mistral:7b';
+const DEFAULT_MODEL: string = 'qwen2.5-coder:14b' //qwen2.5-coder:14b;
 let modelName: string = DEFAULT_MODEL;
 
 
@@ -34,6 +38,7 @@ class SynaxCLI {
     private mcpClients: Client[] = [];
     private transports: StdioClientTransport[] = [];
     private tools: Tool[] = [];
+    private formatingTools: string = "";
     private toolToClient: Map<string, Client> = new Map();
     private mcpConnected: boolean = false;
     private serverStatuses: Map<string, boolean> = new Map();
@@ -149,10 +154,13 @@ class SynaxCLI {
     }
 
     async processUserInput(input: string): Promise<void> {
+        // Déclarer cleanup au début de la méthode pour qu'elle soit accessible partout
+        let cleanup: (() => void) | null = null;
+        
         try {
             loadingAnimation.start();
             // Save user input in history
-            try { addUserInput(input); } catch {}
+            try { addHistory(input, 'USER'); } catch {}
 
             // try {
             //     input = await this.translationAgent.translateToEnglish(input);
@@ -160,82 +168,163 @@ class SynaxCLI {
             //     console.error(chalk.yellow('⚠️  Erreur lors de la traduction:'), error);
             // }
 
+            this.formatingTools = formatToolsForMistral(this.tools);
+            // this.formatingTools += formatToolsForPrompt(this.tools);
+            // console.log(this.formatingTools);
 
-            // Planning
-            if (this.planningAgent) {
-                const planResult = await this.planningAgent.planSteps(this.tools, input);
-                // console.log(planResult);
-            }
-
-            
 
 
             // Determine which agent to use
-            const routingDecision = await agentRouteRequest(
-                input,
-                this.baseUrl,
-                this.model,
-                this.timeout,
-                this.mcpConnected,
-                this.tools
-            );
+            const routingDecision = await agentRouteRequest(input,this.baseUrl,this.model,this.timeout,this.mcpConnected,this.tools);
 
+            // Add system information to the input
+            let systemInfos = '';
+            try {
+                const systemInfo = getSystemInfo();
+                if (systemInfo) {
+                    systemInfos += `\n\n** SYSTEM INFO **\n${JSON.stringify(systemInfo, null, 2)}\n\n`;
+                    // console.log(systemInfo);
+                }
+            } catch (error) {
+                // console.error('Error getting system info:', error);
+            }
 
-            // console.log(this.tools);
-            // Prefix the prompt with the conversation history (timestamps + labels)
-            const convHistory = getHistory();
-            if (convHistory && convHistory.trim().length > 0) {
-                input += '\n\nCONVERSATION HISTORY:\n' + convHistory + "\n\n";
+            // Add conversation history to the input
+            let history = '';
+            try {
+                const convHistory = getHistory();
+                if (convHistory?.trim()) {
+                    history += `\n\n** CONVERSATION HISTORY **\n${convHistory}\n\n`;
+                }
+            } catch (error) {
+                // console.error('Error getting conversation history:', error);
             }
             // console.log(input);
+            const fullInput = systemInfos + history + input;
+
+
+
+
+            // Configuration de l'écouteur pour la touche Échap
+            let shouldBreak = false;
+            // Sauvegarder la configuration actuelle de readline
+            const { stdin } = process;
+            const wasRaw = stdin.isRaw;
+            const wasPaused = stdin.isPaused();
+            // Configurer le mode raw pour détecter la touche Échap
+            if (!wasPaused) stdin.pause();
+            if (!wasRaw) stdin.setRawMode(true);
+            // Fonction de gestion de la touche Échap
+            const handleKey = (key: string) => {
+                if (key === '\u001b') { // Touche Échap
+                    shouldBreak = true;
+                    console.log('\n\n' + chalk.yellow('Interrompu par l\'utilisateur. Retour à l\'input...') + '\n');
+                }
+            };
+            // Ajouter l'écouteur
+            stdin.on('data', handleKey);
+            // Initialiser la fonction de nettoyage
+            cleanup = () => {
+                stdin.off('data', handleKey);
+                if (!wasRaw) stdin.setRawMode(false);
+                if (!wasPaused) stdin.resume();
+                cleanup = null; // Éviter les appels multiples
+            };
+
+
+
 
             loadingAnimation.stop();
             if (routingDecision === 'TOOL' && this.toolAgent) {
-                const selectedTool = await this.toolSelectorAgent.selectBestTool(this.tools, input);
-                console.log(selectedTool);
-                let attempts = 0;
-                const maxAttempts = 5;
-                let currentPrompt = input;
-                let toolName: string | null | undefined = undefined;
+                let stepNumber = 1;
+                // Planning
+                if (!this.planningAgent) return;
+                    
+                const planResult = await this.planningAgent.planSteps(this.formatingTools, fullInput);
+                // try { addHistory(`Planning: ${planResult.steps.map((step) => step.step).join('\n')}`, '** STEP_PLANNING **'); } catch {}
+                // console.log(planResult);
+                if (!planResult || !planResult.steps || planResult.steps.length === 0) return;
+                console.log(chalk.gray(' Steps length: ' + planResult.steps.length));
+                for (const step of planResult.steps) {
+                    if (stepNumber > 10 || shouldBreak) break;
+                    stepNumber++;
+                    console.log(` Step ${step.number}: ${chalk.cyan(step.step)}`);
+                    console.log(chalk.blueBright('- ' + step.prompt));
+                    // const stepOfPlanning = `\n\n** ACTUAL STEP OF PLANNING **\n${step.number}. ${step.step}\n${step.prompt}\n`;
+                    // try { addHistory(`Step number:${step.number} - step: ${step.step} - prompt: ${step.prompt}`, '** ACTUAL_STEP_OF_PLANNING **'); } catch {}
+                    // input += stepOfPlanning;
 
-                while (attempts < maxAttempts) {
-                    loadingAnimation.start();
-                    try {
-                        const result = await this.toolAgent.handleToolExecution(this.tools, currentPrompt, selectedTool!);
-                        toolName = result?.toolName;
-                        loadingAnimation.stop();
-                        process.stdout.moveCursor(0, -1);
-                        if (result?.cancelled) {
-                            break;
-                        }
-                        break; // Success, exit loop
-                    } catch (error) {
-                        attempts++;
-                        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-                        console.error(chalk.red(`  Attempt ${attempts}`));
-                        process.stdout.moveCursor(0, -1);
-                        // console.error(chalk.red(`Attempt ${attempts} failed: ${error}`));
-                        // console.error(chalk.red(`Error message: ${errorMessage}`));
+                            
+                    // console.log(chalk.gray(step.prompt) + '\n');
+                    // process.stdout.moveCursor(0, -1);
 
-                        if (attempts < maxAttempts && this.controlAgent) {
-                            currentPrompt = await this.controlAgent.controlToolAgent(toolName!, currentPrompt, errorMessage, attempts);
+                    // input += '\n\nACTUAL STEP OF PLANNING:\n' + stepNumber + '. ' + step.step + "\n\n";
+
+                    // Create selected tool prompt to pass to tool agent to make it execute the tool
+                    // const selectedTool = await this.toolSelectorAgent.selectBestTool(this.tools, input);
+                    // const selectedTool = await this.toolSelectorAgent.selectBestTool(this.formatingTools, input);
+                    // if (selectedTool) {
+                    //     input += `\n\n** SELECTED TOOL ** \n${selectedTool}\n\n`;
+                    // }
+                    // console.log(selectedTool);
+                    let attempts = 0;
+                    const maxAttempts = 5;
+                    let currentPrompt = fullInput;
+                    let toolName: string | null | undefined = undefined;
+
+                    while (attempts < maxAttempts) {
+                        loadingAnimation.start();
+                        try {
+                            const result = await this.toolAgent.handleToolExecution(this.formatingTools, currentPrompt);
+                            toolName = result?.toolName;
                             loadingAnimation.stop();
-                        } else {
-                            console.error(chalk.red('Max attempts reached. Tool execution failed.'));
+                            process.stdout.moveCursor(0, -1);
+                            try { addHistory(`${result}`, 'RESPONSE EXECUTION TOOL'); } catch {}
+                            
+                            if (result?.cancelled) {
+                                break;
+                            }
+                            break; // Success, exit loop
+                        } catch (error) {
+                            attempts++;
+                            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                            try { addHistory(`${errorMessage}`, 'ERROR EXECUTION TOOL'); } catch {}
+                            console.error(chalk.red(`  Attempt ${attempts}`));
+                            process.stdout.moveCursor(0, -1);
+
+                            if (attempts < maxAttempts && this.controlAgent) {
+                                currentPrompt = await this.controlAgent.controlToolAgent(this.formatingTools,toolName!, currentPrompt, errorMessage, attempts);
+                                try { addHistory(`${errorMessage}`, 'RESPONSE CONTROL TOOL'); } catch {}
+                                // loadingAnimation.stop();
+                            } else {
+                                console.error(chalk.red('Max attempts reached. Tool execution failed.'));
+                                loadingAnimation.stop();
+                                break;
+                            }
                             loadingAnimation.stop();
-                            break;
                         }
                     }
                 }
+                const newHistory = getHistory();
+                const prompt = `
+                ** CONVERSATION HISTORY **
+                ${newHistory}
+                
+                ** USER INPUT **
+                ${input}
+                
+                ** RULES **
+                - LOOK AT CONVERSATION HISTORY all lines named OUTPUT EXECUTION TOOL.
+                - COMPARE THE RESULT OF THE TOOL EXECUTION WITH THE USER INPUT.
+                - Make a short final answer based on the comparison.
+                - If you don't think the answer is correct, ask user if it is correct.
+                `;
+                // - Ask user if he want something else.                
+                await this.conversationAgent.handleConversation(prompt);
             } else if (routingDecision === 'CONVERSATION' && this.conversationAgent) {
                 await this.conversationAgent.handleConversation(input);
             }
-
-
-
-
-
-
+                
             loadingAnimation.stop();
             setTimeout(() => {
                 this.updateBottomLine();
@@ -243,6 +332,11 @@ class SynaxCLI {
         } catch (error) {
             loadingAnimation.stop();
             console.error('\n' + chalk.red('Processing Error:'), error instanceof Error ? error.message : 'Unknown error');
+        } finally {
+            // Nettoyage de l'écouteur de la touche Échap
+            if (cleanup) {
+                cleanup();
+            }
         }
 
         this.rl.prompt();
@@ -419,7 +513,7 @@ async function main() {
     // Start Ollama service
     try {
         console.log(chalk.blue('Starting Ollama service...'));
-        await ollamaService.start('mistral');
+        await ollamaService.start(modelName);
         model = ollamaService.getModelName();
         console.log(chalk.green(`Ollama service started with model: ${model}`));
     } catch (error) {

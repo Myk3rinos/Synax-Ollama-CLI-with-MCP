@@ -34,38 +34,38 @@ export class ToolSelectorAgent {
      * @param userInput Demande de l'utilisateur
      * @returns Promesse résolue avec le nom de l'outil sélectionné ou null si aucun outil n'est approprié
      */
-    async selectBestTool(tools: Tool[], userInput: string): Promise<string | null> {
-        if (!tools || tools.length === 0) {
+    async selectBestTool(formatingTools: string, userInput: string): Promise<string | null> {
+        if (!formatingTools || formatingTools.length === 0) {
             return null;
         }
 
-        // Formater la description des outils de manière plus robuste
-        const toolsDescription = tools.map(tool => {
-            let desc = `- ${tool.name}: ${tool.description || 'No description'}\n`;
+        // // Formater la description des outils de manière plus robuste
+        // const toolsDescription = tools.map(tool => {
+        //     let desc = `- ${tool.name}: ${tool.description || 'No description'}\n`;
             
-            try {
-                const properties = tool.input_schema?.properties;
-                if (properties && typeof properties === 'object') {
-                    desc += '  Parameters:\n';
-                    Object.entries(properties).forEach(([param, schema]: [string, any]) => {
-                        if (schema && typeof schema === 'object') {
-                            desc += `    - ${param}: ${schema.description || schema.type || 'No type'}\n`;
-                        } else {
-                            desc += `    - ${param}: No schema details\n`;
-                        }
-                    });
-                }
-            } catch (error) {
-                console.error(chalk.yellow(`⚠️  Error processing tool ${tool.name}:`), error);
-            }
+        //     try {
+        //         const properties = tool.input_schema?.properties;
+        //         if (properties && typeof properties === 'object') {
+        //             desc += '  Parameters:\n';
+        //             Object.entries(properties).forEach(([param, schema]: [string, any]) => {
+        //                 if (schema && typeof schema === 'object') {
+        //                     desc += `    - ${param}: ${schema.description || schema.type || 'No type'}\n`;
+        //                 } else {
+        //                     desc += `    - ${param}: No schema details\n`;
+        //                 }
+        //             });
+        //         }
+        //     } catch (error) {
+        //         console.error(chalk.yellow(`⚠️  Error processing tool ${tool.name}:`), error);
+        //     }
             
-            return desc;
-        }).join('\n');
+        //     return desc;
+        // }).join('\n');
 
         const prompt = `You are a tool selection agent. Your task is to determine the most appropriate tool to use based on the user's request.
 
 AVAILABLE TOOLS:
-${toolsDescription}
+${formatingTools}
 
 USER REQUEST:"${userInput}"
 
@@ -106,9 +106,9 @@ Only respond with the JSON object, nothing else.`;
                 const result = JSON.parse(responseText);
                 if (result.selected_tool && typeof result.selected_tool === 'string') {
                     // Vérifier que l'outil sélectionné existe bien dans la liste
-                    const toolExists = tools.some(tool => tool.name === result.selected_tool);
+                    const toolExists = formatingTools.includes(result.selected_tool);
                     if (toolExists) {
-                        console.log(chalk.gray(`  Selected tool: ${result.selected_tool} (confidence: ${(result.confidence * 100).toFixed(0)}%)`));
+                        console.log(chalk.gray(`- Selected tool: ${result.selected_tool} (confidence: ${(result.confidence * 100).toFixed(0)}%)`));
                         return result.selected_tool;
                     }
                 }
