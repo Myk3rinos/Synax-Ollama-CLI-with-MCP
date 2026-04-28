@@ -2,7 +2,7 @@ import chalk from 'chalk';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { addHistory } from '../history/history.js';
-import { TTSAgent } from './tts_agent.mjs';
+// import { TTSAgent } from './tts_agent.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -11,7 +11,7 @@ export class ConversationAgent {
     private baseUrl: string;
     private model: string;
     private timeout: number;
-    private ttsAgent: TTSAgent;
+    // private ttsAgent: TTSAgent;
 
     constructor(baseUrl: string, model: string, timeout: number = 60000) {
         this.baseUrl = baseUrl;
@@ -19,14 +19,14 @@ export class ConversationAgent {
         this.timeout = timeout;
         
         // Initialiser l'agent TTS ElevenLabs
-        this.ttsAgent = new TTSAgent(process.env.ELEVENLABS_API_KEY, {
-            // Options par défaut pour la voix
-            voiceId: 'JBFqnCBsd6RMkjVDRZzb', // Voix par défaut
-            modelId: 'eleven_multilingual_v2', // Modèle multilingue
-            stability: 0.5,
-            similarityBoost: 0.75,
-            speakerBoost: true
-        });
+        // this.ttsAgent = new TTSAgent(process.env.ELEVENLABS_API_KEY, {
+        //     // Options par défaut pour la voix
+        //     voiceId: 'JBFqnCBsd6RMkjVDRZzb', // Voix par défaut
+        //     modelId: 'eleven_multilingual_v2', // Modèle multilingue
+        //     stability: 0.5,
+        //     similarityBoost: 0.75,
+        //     speakerBoost: true
+        // });
     }
 
     
@@ -111,13 +111,13 @@ export class ConversationAgent {
                     
                     
                     // Envoyer la réponse au TTS de manière asynchrone
-                    this.ttsAgent.speak(responseAccum)
-                        .then(() => {
-                            console.log(chalk.green('\nSynthèse vocale terminée'));
-                        })
-                        .catch(error => {
-                            console.error(chalk.red('\nErreur lors de la synthèse vocale:'), error);
-                        });
+                    // this.ttsAgent.speak(responseAccum)
+                    //     .then(() => {
+                    //         console.log(chalk.green('\nSynthèse vocale terminée'));
+                    //     })
+                    //     .catch(error => {
+                    //         console.error(chalk.red('\nErreur lors de la synthèse vocale:'), error);
+                    //     });
                 } catch {}
             }
             

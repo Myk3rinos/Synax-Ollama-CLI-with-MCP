@@ -23,8 +23,8 @@ import { ollamaService } from './utils/ollamaService.js';
 import { formatToolsForMistral, formatToolsForPrompt } from './utils/formatTools.js';
 import { getSystemInfo } from './utils/infoSystem.js';
 
-// const DEFAULT_MODEL: string = 'mistral:7b';
-const DEFAULT_MODEL: string = 'qwen2.5-coder:14b' //qwen2.5-coder:14b;
+const DEFAULT_MODEL: string = 'mistral:7b';
+// const DEFAULT_MODEL: string = 'qwen2.5-coder:14b' //qwen2.5-coder:14b;
 let modelName: string = DEFAULT_MODEL;
 
 

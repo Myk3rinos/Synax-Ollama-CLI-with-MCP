@@ -66,8 +66,8 @@ export class TTSAgent {
 
     constructor(apiKey?: string, options: TTSOptions = {}) {
         this.client = new ElevenLabsClient({
-            // apiKey: apiKey || process.env.ELEVENLABS_API_KEY
-            apiKey: "sk_555fa6cbd69e4ba7c9bb3952ddb0336eea228da04dd44d7f"
+            apiKey: apiKey || process.env.ELEVENLABS_API_KEY
+            // apiKey: "sk_555fa6cbd69e4ba7c9bb3952ddb0336eea228da04dd44d7f"
         });
 
         this.options = {
